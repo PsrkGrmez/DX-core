@@ -55,16 +55,13 @@ jobs:
 
       - name: Build iOS Framework
         run: |
-          mkdir -p build/ios
+          mkdir -p build/ios/Warp.framework/Headers
+          
           go build -v -buildmode=c-archive -trimpath \
             -ldflags "-s -w -buildid= -X main.version=${{ github.ref }}" \
-            -o build/ios/libwarp.a ./cmd/warp-plus
+            -o build/ios/Warp.framework/Warp ./cmd/warp-plus
           
-          cp build/ios/libwarp.h build/ios/
-          
-          mkdir -p build/ios/Warp.framework/Headers
-          cp build/ios/libwarp.a build/ios/Warp.framework/Warp
-          cp build/ios/libwarp.h build/ios/Warp.framework/Headers/
+          cp build/ios/Warp.framework/Warp.h build/ios/Warp.framework/Headers/
           
           cd build/ios
           zip -r ../../warp-plus_${{ env.ASSET_NAME }}.zip Warp.framework
