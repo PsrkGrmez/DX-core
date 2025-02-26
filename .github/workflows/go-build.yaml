@@ -5,6 +5,8 @@ on:
   release:
     types: [published]
   push:
+    tags:
+      - 'v*'  # فقط با تگ‌های شروع شده با v اجرا شود
 
 jobs:
   build:
@@ -112,10 +114,27 @@ jobs:
           </dict>
           </plist>
           EOF
+
+      - name: Create combined ZIP archive
+        if: ${{ matrix.platform == 'ios' }}
+        run: |
+          # ایجاد دایرکتوری برای جمع‌آوری همه فریمورک‌ها
+          mkdir -p combined/device
+          mkdir -p combined/simulator
           
-          # ساخت فایل zip
-          cd build/ios
-          zip -r ../../warp-plus_${{ env.ASSET_NAME }}.zip Warp.framework
+          # کپی فریمورک‌های مناسب به دایرکتوری‌های مربوطه
+          if [[ "${{ matrix.platform }}" == "ios" ]]; then
+            cp -R build/ios/Warp.framework combined/device/
+          else
+            cp -R build/ios/Warp.framework combined/simulator/
+          fi
+          
+          # ایجاد فایل ZIP از همه فریمورک‌ها
+          cd combined
+          zip -r ../warp-ios-frameworks.zip .
+          
+          echo "Created combined ZIP archive"
+          ls -la ../warp-ios-frameworks.zip
 
       - name: Upload iOS Framework
         uses: actions/upload-artifact@v4
@@ -123,11 +142,34 @@ jobs:
           name: warp-plus_${{ env.ASSET_NAME }}_${{ env.REF }}
           path: build/ios/Warp.framework
 
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
-        if: github.event_name == 'release'
+      - name: Upload combined ZIP
+        if: ${{ matrix.platform == 'ios' }}
+        uses: actions/upload-artifact@v4
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: ./warp-plus_${{ env.ASSET_NAME }}.zip*
-          tag: ${{ github.ref }}
-          file_glob: true
+          name: warp-ios-frameworks
+          path: warp-ios-frameworks.zip
+
+  create-release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+          
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/warp-ios-frameworks/warp-ios-frameworks.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
