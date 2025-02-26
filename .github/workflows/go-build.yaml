@@ -15,65 +15,30 @@ jobs:
       matrix:
         include:
           - goos: darwin
-            goarch: amd64
+            goarch: arm64
+            platform: ios
+            target: ios
           - goos: darwin
-            goarch: arm64
-
-          - goos: android
-            goarch: arm64
-
-          - goos: linux
             goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: linux
-            goarch: arm
-            goarm: 7
-          - goos: linux
-            goarch: riscv64
-          - goos: linux
-            goarch: mips64
-          - goos: linux
-            goarch: mips64le
-          - goos: linux
-            goarch: mips
-          - goos: linux
-            goarch: mipsle
-          - goos: linux
-            goarch: mips64
-            gomips: softfloat
-          - goos: linux
-            goarch: mips64le
-            gomips: softfloat
-          - goos: linux
-            goarch: mips
-            gomips: softfloat
-          - goos: linux
-            goarch: mipsle
-            gomips: softfloat
+            platform: ios-simulator
+            target: ios
 
-          - goos: windows
-            goarch: amd64
-          - goos: windows
-            goarch: arm64
-          - goos: windows
-            goarch: 386
-
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     env:
       GOOS: ${{ matrix.goos }}
       GOARCH: ${{ matrix.goarch }}
-      GOARM: ${{ matrix.goarm }}
-      GOMIPS: ${{ matrix.gomips }}
-      CGO_ENABLED: 0
+      CGO_ENABLED: 1
     steps:
       - name: Checkout codebase
         uses: actions/checkout@v4
 
       - name: Show workflow information
         run: |
-          export _NAME=$GOOS-$GOARCH$GOARM$GOMIPS
-          echo "GOOS: $GOOS, GOARCH: $GOARCH, GOARM: $GOARM, GOMIPS: $GOMIPS, RELEASE_NAME: $_NAME"
+          export _NAME=$GOOS-$GOARCH
+          if [ ! -z "${{ matrix.platform }}" ]; then
+            export _NAME=$_NAME-${{ matrix.platform }}
+          fi
+          echo "GOOS: $GOOS, GOARCH: $GOARCH, PLATFORM: ${{ matrix.platform }}, RELEASE_NAME: $_NAME"
           echo "ASSET_NAME=$_NAME" >> $GITHUB_ENV
           echo "REF=${GITHUB_SHA::6}" >> $GITHUB_ENV
 
@@ -83,43 +48,32 @@ jobs:
           go-version: '1.22'
           check-latest: true
 
-      - name: Build warp-plus
-        run: |
-          go build -v -o warp-plus_${{ env.ASSET_NAME }}/ -trimpath -ldflags "-s -w -buildid= -X main.version=${{ github.ref }}" ./cmd/warp-plus
-          go build -v -o warp-scan_${{ env.ASSET_NAME }}/ -trimpath -ldflags "-s -w -buildid= -X main.version=${{ github.ref }}" ./cmd/warp-scan
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
 
-      - name: Copy README.md & LICENSE
+      - name: Build iOS Framework
         run: |
-          cp ${GITHUB_WORKSPACE}/README.md ./warp-plus_${{ env.ASSET_NAME }}/README.md
-          cp ${GITHUB_WORKSPACE}/LICENSE ./warp-plus_${{ env.ASSET_NAME }}/LICENSE
+          mkdir -p build/ios
+          go build -v -buildmode=c-archive -trimpath \
+            -ldflags "-s -w -buildid= -X main.version=${{ github.ref }}" \
+            -o build/ios/libwarp.a ./cmd/warp-plus
+          
+          cp build/ios/libwarp.h build/ios/
+          
+          mkdir -p build/ios/Warp.framework/Headers
+          cp build/ios/libwarp.a build/ios/Warp.framework/Warp
+          cp build/ios/libwarp.h build/ios/Warp.framework/Headers/
+          
+          cd build/ios
+          zip -r ../../warp-plus_${{ env.ASSET_NAME }}.zip Warp.framework
 
-      - name: Create ZIP archive
-        shell: bash
-        run: |
-          pushd ./warp-plus_${{ env.ASSET_NAME }} || exit 1
-          touch -mt $(date +%Y01010000) *
-          zip -9vr ../warp-plus_${{ env.ASSET_NAME }}.zip .
-          popd || exit 1
-          FILE=./warp-plus_${{ env.ASSET_NAME }}.zip
-          DGST=$FILE.dgst
-          for METHOD in {"md5","sha256","sha512"}
-          do
-            openssl dgst -$METHOD $FILE | sed 's/([^)]*)//g' >>$DGST
-          done
-
-      - name: Upload warp-plus files to Artifacts
+      - name: Upload iOS Framework
         uses: actions/upload-artifact@v4
         with:
           name: warp-plus_${{ env.ASSET_NAME }}_${{ env.REF }}
-          path: |
-            ./warp-plus_${{ env.ASSET_NAME }}/*
-
-      - name: Upload warp-scan files to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: warp-scan_${{ env.ASSET_NAME }}_${{ env.REF }}
-          path: |
-            ./warp-scan_${{ env.ASSET_NAME }}/*
+          path: build/ios/Warp.framework
 
       - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
