@@ -55,14 +55,65 @@ jobs:
 
       - name: Build iOS Framework
         run: |
-          mkdir -p build/ios/Warp.framework/Headers
+          # ایجاد دایرکتوری‌های مورد نیاز
+          mkdir -p build/ios
           
+          # ساخت کتابخانه استاتیک و header
           go build -v -buildmode=c-archive -trimpath \
             -ldflags "-s -w -buildid= -X main.version=${{ github.ref }}" \
-            -o build/ios/Warp.framework/Warp ./cmd/warp-plus
+            -o build/ios/libwarp.a ./cmd/warp-plus
           
-          cp build/ios/Warp.framework/Warp.h build/ios/Warp.framework/Headers/
+          # نمایش محتویات دایرکتوری برای debug
+          echo "Contents of build/ios directory:"
+          ls -la build/ios/
           
+          # ایجاد ساختار فریمورک
+          mkdir -p build/ios/Warp.framework/Headers
+          
+          # کپی فایل‌ها به مسیر درست
+          cp build/ios/libwarp.a build/ios/Warp.framework/Warp
+          
+          # بررسی وجود فایل header
+          if [ -f "build/ios/libwarp.h" ]; then
+            cp build/ios/libwarp.h build/ios/Warp.framework/Headers/Warp.h
+          else
+            echo "Header file not found. Searching for it..."
+            find build -name "*.h"
+          fi
+          
+          # نمایش محتویات فریمورک
+          echo "Contents of Warp.framework directory:"
+          ls -la build/ios/Warp.framework/
+          
+          # ساخت فایل Info.plist برای فریمورک
+          cat > build/ios/Warp.framework/Info.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleDevelopmentRegion</key>
+              <string>en</string>
+              <key>CFBundleExecutable</key>
+              <string>Warp</string>
+              <key>CFBundleIdentifier</key>
+              <string>org.bepass.warp</string>
+              <key>CFBundleInfoDictionaryVersion</key>
+              <string>6.0</string>
+              <key>CFBundleName</key>
+              <string>Warp</string>
+              <key>CFBundlePackageType</key>
+              <string>FMWK</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>MinimumOSVersion</key>
+              <string>12.0</string>
+          </dict>
+          </plist>
+          EOF
+          
+          # ساخت فایل zip
           cd build/ios
           zip -r ../../warp-plus_${{ env.ASSET_NAME }}.zip Warp.framework
 
