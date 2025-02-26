@@ -5,6 +5,9 @@ on:
   release:
     types: [published]
   push:
+    branches:
+      - main
+      - master
     tags:
       - 'v*'  # فقط با تگ‌های شروع شده با v اجرا شود
 
