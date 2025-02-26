@@ -158,6 +158,23 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Create Tag
+        id: create_tag
+        run: |
+          # ایجاد یک تگ بر اساس تاریخ و زمان فعلی
+          TAG_NAME="v$(date +'%Y.%m.%d-%H%M%S')"
+          echo "Creating tag: $TAG_NAME"
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -170,6 +187,7 @@ jobs:
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.create_tag.outputs.tag_name }}
           files: |
             artifacts/warp-ios-frameworks/warp-ios-frameworks.zip
           draft: false
